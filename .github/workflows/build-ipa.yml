@@ -2,11 +2,8 @@ name: Build Madeira IPA (unsigned)
 
 on:
   workflow_dispatch:
-  # Paused while builds run on the owner's Mac (2026-10-13). To build on push
-  # to main again, uncomment the three lines below.
-  # push:
-  #   branches: [main]
-  #   paths: [".github/workflows/build-ipa.yml"]
+  push:
+    branches: [main]
 
 # A push and a manual dispatch seconds apart used to start two parallel
 # multi-hour macOS jobs on the same commit.
@@ -16,8 +13,7 @@ concurrency:
 
 jobs:
   build:
-    # madeira-bcd: runs only in the owner's repository; a fork's run is skipped.
-    if: github.repository == 'thebcd69/madeira-bcd'
+    if: github.repository == 'raulferns/bcd-games' || github.repository == 'thebcd69/madeira-bcd'
     runs-on: macos-15
     # contents: write only so the token can see DRAFT releases, which is where
     # the Metal Shader Converter installer is kept (drafts are not public).
@@ -2291,12 +2287,20 @@ jobs:
       - name: Package Madeira and Madeira2 unsigned IPAs
         run: python3 tools/ota-variants.py package build-out/Madeira.xcarchive/Products/Applications/Madeira.app build-out ${{ steps.bn.outputs.n }}
 
+      - name: Upload unsigned IPAs
+        uses: actions/upload-artifact@v4
+        with:
+          name: BCD-0.1.${{ steps.bn.outputs.n }}-unsigned-ipa
+          path: build-out/*.ipa
+          if-no-files-found: warn
+
       # Over-the-air install: sign with the owner's certificate (kept in the
       # owner's PRIVATE bucket, never in the repository) and put both signed IPAs
       # plus installation pages (7-day pre-signed links) in the same bucket.
       # A signing/upload failure is caught by the private-bucket gate below.
       - name: Sign for OTA install (private bucket)
         id: ota
+        if: github.repository == 'thebcd69/madeira-bcd'
         continue-on-error: true
         env:
           B2_KEY_ID: ${{ secrets.B2_KEY_ID }}
@@ -2319,7 +2323,7 @@ jobs:
       # private R2 bucket (the OTA step above). If that step did not succeed,
       # the build fails here instead of keeping the IPA somewhere public.
       - name: Check the IPA reached the private bucket
-        if: steps.ota.outcome != 'success'
+        if: github.repository == 'thebcd69/madeira-bcd' && steps.ota.outcome != 'success'
         run: |
           echo "::error::OTA signing/upload did not succeed: this build's IPA was not kept anywhere (no GitHub artifact by design)"
           exit 1
