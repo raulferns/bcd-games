@@ -2241,21 +2241,30 @@ static void *wine_process_thread(void *arg) {
             dprintf(STDERR_FILENO, "[WineProc] Wine exited with code %d (caught by longjmp)\n", wine_ios_exit_code);
         }
 
-        /* A launcher stub that starts the game and exits at once (GTA V
-         * Enhanced: PlayGTAV.exe -> GTA5_Enhanced.exe) must not end the
-         * session -- stopping the wineserver here killed the game while it
-         * loaded. If a child process that is not a crash reporter / helper was
-         * started in the last 60 s and still runs, the session goes on until
-         * no such child is left (process_ios.c, madeira_live_game_children).
-         * A game that exits normally long after starting its helpers is not
-         * affected. MADEIRA_WAIT_CHILDREN=0 ends the session with the main
-         * process, as before. */
+        /* A launcher stub that starts the game and exits (PlayGTAV.exe,
+         * Launcher.exe for RDR2, etc.) must not end the session -- stopping
+         * the wineserver here killed the game while it loaded. If a child
+         * process that is not a crash reporter / helper is still running,
+         * the session goes on until no such child is left (process_ios.c,
+         * madeira_live_game_children).
+         * MADEIRA_WAIT_CHILDREN controls the maximum age (seconds) of the child:
+         *   - unset: defaults to 300 s (5 min, covers slower launchers like RDR2's 106 s)
+         *   - >1 (e.g. 600): custom max age in seconds
+         *   - 1 or "all": -1.0 (unlimited age, wait for any non-helper child)
+         *   - 0: ends the session with the main process immediately
+         */
         {
             extern int madeira_live_game_children(char *buf, int len, double max_age);
             const char *wc = getenv("MADEIRA_WAIT_CHILDREN");
             char names[256];
-            int n = madeira_live_game_children(names, sizeof names, 60.0);
-            if (n > 0 && !(wc && wc[0] == '0')) {
+            double max_age = 300.0;
+            if (wc && wc[0]) {
+                double val = atof(wc);
+                if (val > 1.0) max_age = val;
+                else if (val == 1.0 || !strcmp(wc, "all") || !strcmp(wc, "always")) max_age = -1.0;
+            }
+            int n = (wc && wc[0] == '0') ? 0 : madeira_live_game_children(names, sizeof names, max_age);
+            if (n > 0) {
                 dprintf(STDERR_FILENO, "[WineProc] madeira-bcd: the main process exited but %d child process(es) "
                         "it started still run (%s) -- a launcher started the game; the session goes on until "
                         "they exit (MADEIRA_WAIT_CHILDREN=0 ends it with the main process)\n", n, names);
