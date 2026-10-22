@@ -2453,7 +2453,10 @@ static void *wine_process_thread(void *arg) {
             extern int madeira_live_game_children(char *buf, int len, double max_age);
             const char *wc = getenv("MADEIRA_WAIT_CHILDREN");
             char names[256];
-            int n = madeira_live_game_children(names, sizeof names, 60.0);
+            double wait_age = (wc && (!strcmp(wc, "1") || !strcmp(wc, "all") || !strcmp(wc, "-1"))) ? -1.0 : 60.0;
+            if (wc && wc[0] > '1' && wc[0] <= '9') { double v = atof(wc); if (v > 0) wait_age = v; }
+            int n = (wait_age == 60.0) ? madeira_live_game_children(names, sizeof names, 60.0)
+                                       : madeira_live_game_children(names, sizeof names, wait_age);
             if (n > 0 && !(wc && wc[0] == '0')) {
                 dprintf(STDERR_FILENO, "[WineProc] madeira-bcd: the main process exited but %d child process(es) "
                         "it started still run (%s) -- a launcher started the game; the session goes on until "
