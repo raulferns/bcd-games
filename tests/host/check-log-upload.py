@@ -48,6 +48,10 @@ def check(what, cond, detail=""):
 
 core = (R / "app/Madeira/LogUploadCore.swift").read_text()
 app = (R / "app/Madeira/LogUpload.swift").read_text()
+if not (R / "bcd-logs/worker/worker.js").is_file():
+    print("SKIP: bcd-logs/ is absent (the public export has no bcd-logs/)")
+    sys.exit(0)
+
 worker = (R / "bcd-logs/worker/worker.js").read_text()
 toml = (R / "bcd-logs/worker/wrangler.toml").read_text()
 

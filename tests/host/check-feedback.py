@@ -88,6 +88,10 @@ def block(text, header):
     return text[p:b]
 
 
+if not (R / "bcd-logs/worker/worker.js").is_file() or not (R / "tools/pull-logs.py").is_file():
+    print("SKIP: bcd-logs/ or tools/pull-logs.py is absent (the public export has no bcd-logs/)")
+    sys.exit(0)
+
 worker = (R / "bcd-logs/worker/worker.js").read_text()
 toml = (R / "bcd-logs/worker/wrangler.toml").read_text()
 upload = (APP / "FeedbackUpload.swift").read_text()
