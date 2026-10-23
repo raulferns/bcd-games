@@ -188,6 +188,7 @@ fi
 mkdir -p "$B/dlls/stdole2.tlb" && ln -sfn arm64ec-windows "$B/dlls/stdole2.tlb/aarch64-windows"
 # msvcr*: mirror the data exports into the PE mapping (see the script).
 python3 "$R/tools/patch-wine-msvcrt-datasync.py" "$R/wine/dlls/msvcrt/main.c"
+python3 "$R/tools/patch-wine-msvcrt-strlen.py" "$R/wine"
 # d2d1: DC render targets without IDXGISurface1 (DXMT), see the script.
 case " $todo " in *" d2d1 "*) python3 "$R/tools/patch-wine-d2d1-dc-readback.py" "$R/wine/dlls/d2d1/dc_render_target.c" ;; esac
 xi_patched=0

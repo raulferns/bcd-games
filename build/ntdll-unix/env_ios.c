@@ -1073,6 +1073,14 @@ static void add_system_dll_path_var( WCHAR **env, SIZE_T *pos, SIZE_T *size )
 }
 
 
+static void append_envA_if_missing( WCHAR **env, SIZE_T *pos, SIZE_T *size, const char *name, const char *value )
+{
+    WCHAR nameW[64];
+    ascii_to_unicode( nameW, name, strlen(name) + 1 );
+    if (!find_env_var( *env, *pos, nameW, wcslen(nameW) ))
+        append_envA( env, pos, size, name, value );
+}
+
 /*************************************************************************
  *		add_dynamic_environment
  *
@@ -1136,6 +1144,32 @@ static void add_dynamic_environment( WCHAR **env, SIZE_T *pos, SIZE_T *size )
     append_envA( env, pos, size, "WINEUSERLOCALE", user_locale );
     append_envA( env, pos, size, "SystemDrive", "C:" );
     append_envA( env, pos, size, "SystemRoot", "C:\\windows" );
+    {
+        const char *uname = (user_name && user_name[0]) ? user_name : "mobile";
+        char uprofile[128], appdata[128], localappdata[128], tempdir[128], homepath[128];
+
+        snprintf( uprofile, sizeof(uprofile), "C:\\users\\%s", uname );
+        snprintf( appdata, sizeof(appdata), "C:\\users\\%s\\AppData\\Roaming", uname );
+        snprintf( localappdata, sizeof(localappdata), "C:\\users\\%s\\AppData\\Local", uname );
+        snprintf( tempdir, sizeof(tempdir), "C:\\users\\%s\\AppData\\Local\\Temp", uname );
+        snprintf( homepath, sizeof(homepath), "\\users\\%s", uname );
+
+        append_envA_if_missing( env, pos, size, "USERNAME", uname );
+        append_envA_if_missing( env, pos, size, "USERPROFILE", uprofile );
+        append_envA_if_missing( env, pos, size, "APPDATA", appdata );
+        append_envA_if_missing( env, pos, size, "LOCALAPPDATA", localappdata );
+        append_envA_if_missing( env, pos, size, "HOMEDRIVE", "C:" );
+        append_envA_if_missing( env, pos, size, "HOMEPATH", homepath );
+        append_envA_if_missing( env, pos, size, "TEMP", tempdir );
+        append_envA_if_missing( env, pos, size, "TMP", tempdir );
+        append_envA_if_missing( env, pos, size, "ProgramData", "C:\\ProgramData" );
+        append_envA_if_missing( env, pos, size, "ALLUSERSPROFILE", "C:\\ProgramData" );
+        append_envA_if_missing( env, pos, size, "PUBLIC", "C:\\users\\Public" );
+        append_envA_if_missing( env, pos, size, "ProgramFiles", "C:\\Program Files" );
+        append_envA_if_missing( env, pos, size, "ProgramFiles(x86)", "C:\\Program Files (x86)" );
+        append_envA_if_missing( env, pos, size, "CommonProgramFiles", "C:\\Program Files\\Common Files" );
+        append_envA_if_missing( env, pos, size, "CommonProgramFiles(x86)", "C:\\Program Files (x86)\\Common Files" );
+    }
 #ifdef WINE_IOS
     os_log(OS_LOG_DEFAULT, "[Wine] add_dynamic_env: DONE");
 #endif
