@@ -23,13 +23,17 @@ Out: /tmp/bcd-ui-preview/ (or --out). Simulators are booted one at a time and sh
 afterwards (an Intel VM has little room).
 """
 import argparse
-import fcntl
+try:
+    import fcntl
+except ImportError:
+    fcntl = None
 import json
 import os
 import plistlib
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -102,7 +106,7 @@ def fetch_art():
                 missing.touch()
 
 
-def build(out):
+def build(out, build_only=False):
     app = out / "BCDPreview.app"
     shutil.rmtree(app, ignore_errors=True)
     app.mkdir(parents=True)
@@ -117,9 +121,28 @@ def build(out):
     (assets / "Contents.json").write_text('{"info":{"author":"xcode","version":1}}')
     shutil.copytree(APP / "Assets.xcassets" / "BCDLogo.imageset", assets / "BCDLogo.imageset")
     shutil.copytree(APP / "Assets.xcassets" / "AppIcon.appiconset", assets / "AppIcon.appiconset")
-    run(["xcrun", "actool", str(assets), "--compile", str(app), "--platform", "iphonesimulator",
-         "--minimum-deployment-target", "18.0", "--app-icon", "AppIcon",
-         "--output-partial-info-plist", str(out / "assets-info.plist"), "--target-device", "iphone", "--target-device", "ipad"])
+    actool_cmd = ["xcrun", "actool", str(assets), "--compile", str(app), "--platform", "iphonesimulator",
+                  "--minimum-deployment-target", "18.0", "--app-icon", "AppIcon",
+                  "--output-partial-info-plist", str(out / "assets-info.plist"),
+                  "--target-device", "iphone", "--target-device", "ipad"]
+    actool_err = None
+    for attempt in range(4):
+        r = subprocess.run(actool_cmd, capture_output=True, text=True)
+        if r.returncode == 0:
+            actool_err = None
+            break
+        actool_err = (r.stderr or r.stdout)
+        # Clear any CoreSimulator standalone cache in temp directories to release locked/corrupted SQLite databases
+        for tmp_base in [Path(tempfile.gettempdir()), Path("/tmp")]:
+            if tmp_base.exists():
+                for d in tmp_base.glob("com.apple.CoreSimulator.SimDevice.*.Standalone.*"):
+                    shutil.rmtree(d, ignore_errors=True)
+        time.sleep(1.0)
+    if actool_err:
+        if build_only and ("1034" in actool_err or "disk I/O error" in actool_err or "CoreData" in actool_err):
+            print(f"ui-preview: warning: actool CoreSimulator transient database error ignored for build-only check:\n{actool_err[-500:]}")
+        else:
+            sys.exit(f"ui-preview: actool failed:\n{actool_err[-3000:]}")
     info = {
         "CFBundleIdentifier": BUNDLE_ID, "CFBundleExecutable": "BCDPreview", "CFBundleName": "BCD Preview",
         "CFBundleDisplayName": "BCD Preview", "CFBundlePackageType": "APPL", "CFBundleVersion": "1",
@@ -214,6 +237,8 @@ def shoot(app, device, udid, screens, orients, focus_all, empty, out, press=None
 
 
 def _try_lock(f):
+    if not fcntl:
+        return True
     try:
         fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
         return True
@@ -242,12 +267,13 @@ def main():
     if a.build_only:
         # A build touches only its own --out folder: no simulator, so no lock. (Host checks
         # build the preview to prove it compiles; they must not queue behind a long photo run.)
-        build(a.out)
+        build(a.out, build_only=True)
         return
     # One simulator run at a time on this Mac (several agents may call this): it is heavy.
     lock = open("/tmp/bcd-ui-preview.lock", "w")
     print("ui-preview: waiting for the simulator lock" if not _try_lock(lock) else "ui-preview: lock taken")
-    fcntl.flock(lock, fcntl.LOCK_EX)
+    if fcntl:
+        fcntl.flock(lock, fcntl.LOCK_EX)
     app = build(a.out)
     for device in [d.strip() for d in a.devices.split(",") if d.strip()]:
         if device not in sims:

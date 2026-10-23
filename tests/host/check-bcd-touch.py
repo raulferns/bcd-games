@@ -43,6 +43,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 R = Path(__file__).resolve().parents[2]
@@ -313,10 +314,14 @@ if args.skip_preview:
 elif not shutil.which("xcrun"):
     check(not args.require_swift, "xcrun for the preview build", "not found")
 else:
-    with tempfile.TemporaryDirectory(prefix="bcd-touch-preview-") as tmp:
-        r = subprocess.run([sys.executable, str(R / "tools/ui-preview.py"), "--build-only", "--out", tmp],
-                           capture_output=True, text=True)
-        check(r.returncode == 0, "the preview build compiles (BCD's touch views without the engine)", (r.stderr or r.stdout)[-3000:])
+    for attempt in range(3):
+        with tempfile.TemporaryDirectory(prefix="bcd-touch-preview-") as tmp:
+            r = subprocess.run([sys.executable, str(R / "tools/ui-preview.py"), "--build-only", "--out", tmp],
+                               capture_output=True, text=True)
+            if r.returncode == 0:
+                break
+            time.sleep(1.0)
+    check(r.returncode == 0, "the preview build compiles (BCD's touch views without the engine)", (r.stderr or r.stdout)[-3000:])
 
 if failures:
     print(f"{failures} FAILED")
